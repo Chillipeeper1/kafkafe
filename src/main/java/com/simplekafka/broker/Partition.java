@@ -7,7 +7,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -16,7 +15,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Partition {
 
-    // Fundamental units od data storage
+    // Fundamental units of data storage
     private final int id;
     private final Path baseDir;
     private int leader;
@@ -40,7 +39,6 @@ public class Partition {
     public void initialize() throws IOException{
 
         File[] logFiles;
-        Path directory;
         String name;
         int lastDot;
         String nameWithoutIndex;
@@ -60,7 +58,7 @@ public class Partition {
                 file -> file.getName().endsWith(".log")
         );
 
-        if(logFiles != null){
+        if(logFiles != null || logFiles.length == 0){
             for(File f : logFiles){
                 // get only file name
                 name = f.getName();
@@ -77,9 +75,55 @@ public class Partition {
                 segments.add(segmentInfo);
             }
             segments.sort(Comparator.comparingLong(SegmentInfo::baseOffset));
+            openSegmentForAppend(segments.getLast());
 
 
+        } else {
+            // New partition case (no log files)
+            createNewSegment(0);
         }
+
+
+    }
+    public SegmentInfo createNewSegment(long baseOffset) throws IOException {
+
+        String formatted;
+        Path logPath;
+        Path indexPath;
+        SegmentInfo segmentInfo;
+
+        formatted = String.format("%020d", baseOffset); // 20 cero to the left
+        indexPath = baseDir.resolve(formatted + ".index");
+        logPath = baseDir.resolve(formatted + ".log");
+
+        Files.createFile(indexPath);
+        Files.createFile(logPath);
+
+        segmentInfo = new SegmentInfo(baseOffset, logPath, indexPath);
+        segments.add(segmentInfo);
+
+        return segmentInfo;
+    }
+
+    public void openSegmentForAppend(SegmentInfo segment) throws IOException{
+        long fileSize;
+        FileChannel channel;
+
+        RandomAccessFile randomAccessFile;
+        randomAccessFile = new RandomAccessFile(segment.dotLog().toFile(), "rw");
+
+        channel = randomAccessFile.getChannel();
+        fileSize = randomAccessFile.length();
+
+        randomAccessFile.seek(fileSize);
+
+        activeLogFile = randomAccessFile;
+        activeLogChannel = channel;
+
+
+
+
+
     }
 
 
