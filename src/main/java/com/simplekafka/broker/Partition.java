@@ -1,8 +1,6 @@
 package com.simplekafka.broker;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,7 +56,7 @@ public class Partition {
                 file -> file.getName().endsWith(".log")
         );
 
-        if(logFiles != null || logFiles.length == 0){
+        if(logFiles != null && logFiles.length > 0){
             for(File f : logFiles){
                 // get only file name
                 name = f.getName();
@@ -75,13 +73,15 @@ public class Partition {
                 segments.add(segmentInfo);
             }
             segments.sort(Comparator.comparingLong(SegmentInfo::baseOffset));
-            openSegmentForAppend(segments.getLast());
+
 
 
         } else {
             // New partition case (no log files)
             createNewSegment(0);
         }
+        openSegmentForAppend(segments.getLast());
+
 
 
     }
@@ -119,16 +119,27 @@ public class Partition {
 
         activeLogFile = randomAccessFile;
         activeLogChannel = channel;
-
-
-
-
-
     }
 
+    public void computeNextOffset(SegmentInfo activeSegment) throws IOException {
+        int byteRead;
+        int count = 0;
 
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(activeSegment.dotLog().toFile(), "r")) {
+            randomAccessFile.seek(0);
+            try {
+                while (true) {
 
+                    byteRead = randomAccessFile.readInt();
+                    randomAccessFile.skipBytes(byteRead);
+                    count += 1;
+                }
 
+            } catch (EOFException e) {
+                nextOffSet.set(activeSegment.baseOffset() + count);
+            }
+        }
+    }
 
 }
 
